@@ -1,5 +1,6 @@
 from burp import IBurpExtender
 from burp import IContextMenuFactory
+from burp import IParameter
 from javax.swing import JMenuItem, JFrame, JTextArea, JButton, JScrollPane, JPanel, JFileChooser, BorderFactory, JCheckBox
 from java.awt import BorderLayout, Toolkit, Dimension, GridBagLayout, GridBagConstraints, Insets
 from java.awt.datatransfer import StringSelection
@@ -26,12 +27,17 @@ class BurpExtender(IBurpExtender, IContextMenuFactory):
         for message in selected_messages:
             request_info = self._helpers.analyzeRequest(message)
             service = message.getHttpService()
-            url_path = str(request_info.getUrl().getPath())  # Only use the path component
+
+            # Construct the full URL (including host and path)
+            url = service.getProtocol() + "://" + service.getHost()
+            if (service.getProtocol() == "http" and service.getPort() != 80) or (service.getProtocol() == "https" and service.getPort() != 443):
+                url += ":" + str(service.getPort())
+            url += request_info.getUrl().getPath()
+
             method = request_info.getMethod()
-            self.csrf_html_template = "<html>\n<head>\n{script}\n</head>\n<body>\n<form id='csrfForm' action='" + cgi.escape(url_path) + "' method='" + method.lower() + "'>\n"
+            self.csrf_html_template = "<html>\n<head>\n{script}\n</head>\n<body>\n<form id='csrfForm' action='" + cgi.escape(url) + "' method='" + method.lower() + "'>\n"
             
             if method == "POST":
-                # Only include the parameters in the body for POST requests
                 parameters = self._helpers.analyzeRequest(message.getRequest()).getParameters()
                 for parameter in parameters:
                     if parameter.getType() == IParameter.PARAM_BODY:
@@ -39,7 +45,6 @@ class BurpExtender(IBurpExtender, IContextMenuFactory):
             
             self.csrf_html_template += "    <input type='submit' value='Submit Request'/>\n</form>\n</body>\n</html>"
             self.show_csrf_popup()
-
 
     def show_csrf_popup(self):
         self.frame = JFrame("CSRF Wizard - PoC Editor")

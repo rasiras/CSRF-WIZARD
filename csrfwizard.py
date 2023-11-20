@@ -26,16 +26,20 @@ class BurpExtender(IBurpExtender, IContextMenuFactory):
         for message in selected_messages:
             request_info = self._helpers.analyzeRequest(message)
             service = message.getHttpService()
-            url = str(service.getProtocol()) + "://" + str(service.getHost()) + ":" + str(service.getPort()) + str(request_info.getUrl().getPath())
+            url_path = str(request_info.getUrl().getPath())  # Only use the path component
             method = request_info.getMethod()
-            self.csrf_html_template = "<html>\n<head>\n{script}\n</head>\n<body>\n<form id='csrfForm' action='" + cgi.escape(url) + "' method='" + method.lower() + "'>\n"
+            self.csrf_html_template = "<html>\n<head>\n{script}\n</head>\n<body>\n<form id='csrfForm' action='" + cgi.escape(url_path) + "' method='" + method.lower() + "'>\n"
             
             if method == "POST":
-                for parameter in request_info.getParameters():
-                    self.csrf_html_template += "    <input type='hidden' name='" + cgi.escape(parameter.getName()) + "' value='" + cgi.escape(parameter.getValue()) + "'/>\n"
+                # Only include the parameters in the body for POST requests
+                parameters = self._helpers.analyzeRequest(message.getRequest()).getParameters()
+                for parameter in parameters:
+                    if parameter.getType() == IParameter.PARAM_BODY:
+                        self.csrf_html_template += "    <input type='hidden' name='" + cgi.escape(parameter.getName()) + "' value='" + cgi.escape(parameter.getValue()) + "'/>\n"
             
             self.csrf_html_template += "    <input type='submit' value='Submit Request'/>\n</form>\n</body>\n</html>"
             self.show_csrf_popup()
+
 
     def show_csrf_popup(self):
         self.frame = JFrame("CSRF Wizard - PoC Editor")
